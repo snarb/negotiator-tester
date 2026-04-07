@@ -119,6 +119,32 @@ def parse_json_field(raw_value: Any, fallback: Any) -> Any:
         return fallback
 
 
+def extract_selected_arms(row: sqlite3.Row) -> List[str]:
+    parsed_meta = parse_json_field(row["metadata"], {})
+    if not isinstance(parsed_meta, dict):
+        return []
+
+    selected_arms = parsed_meta.get("selected_arms", {})
+    if not isinstance(selected_arms, dict):
+        return []
+
+    stage_order = ["persona", "J1", "J2", "J4", "J5"]
+    arm_lines: List[str] = []
+
+    for stage in stage_order:
+        arm_id = selected_arms.get(stage)
+        if arm_id not in (None, ""):
+            arm_lines.append(f"{stage}: {arm_id}")
+
+    for stage, arm_id in selected_arms.items():
+        if stage in stage_order:
+            continue
+        if arm_id not in (None, ""):
+            arm_lines.append(f"{stage}: {arm_id}")
+
+    return arm_lines
+
+
 def build_db_status(ticket_id: str, state: str, details: Optional[Dict[str, Any]] = None) -> str:
     payload = {"state": state, "ticket_id": ticket_id, "db_path": NEGOTIATOR_DB_PATH}
     if details:
@@ -161,18 +187,11 @@ def check_db_for_updates(ticket_id: str):
                 add_debug_entry(ticket_id, message)
                 
         # 1. Selected arms
-        parsed_meta = parse_json_field(row["metadata"], {})
-        arms = parsed_meta.get('selected_arms', [])
-        if arms:
-            arm_names = []
-            for arm in arms:
-                if isinstance(arm, dict):
-                    arm_names.append(arm.get("name") or arm.get("arm_name") or json.dumps(arm, ensure_ascii=False))
-                else:
-                    arm_names.append(str(arm))
+        arm_names = extract_selected_arms(row)
+        if arm_names:
             report(
-                f"selected_arms_{json.dumps(arm_names, ensure_ascii=False)}",
-                f"### Selected Arms\n{format_debug_json(arm_names)}",
+                f"selected_arms_{json.dumps(arm_names, ensure_ascii=False, sort_keys=True)}",
+                f"### Selected Arms\n{format_debug_json(dict(line.split(': ', 1) for line in arm_names))}",
             )
             
         # 2. csat_score and dispute_detected

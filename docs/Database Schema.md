@@ -65,13 +65,31 @@ Notes for external consumers:
 - `messages` is the main audit trail for user messages, assistant messages, and tool-call traces.
 - `csat_received` distinguishes "CSAT not received yet" from a populated `csat_score`.
 - `outcomes_last_synced_at` shows when delayed CSAT/dispute outcomes were last checked successfully.
+- `metadata.selected_arms` stores the chosen arms per lifecycle stage as a JSON object. The current keys are `persona`, `J1`, `J2`, `J4`, and `J5`. Values are the selected `arm_id` strings for that ticket.
+- `metadata.available_bundle_id` stores the resolved bundle used to filter the negotiation ladder.
+- `metadata.selected_ladder` stores the raw selected concession ladder before bundle-specific filtering.
+- `metadata.filtered_ladder` stores the bundle-filtered concession ladder that is actually passed to negotiation-stage prompt construction and tool-plan validation.
 
 Compact JSON shapes:
 
-- `signal_history[*]`: `{"noticeable_anger": bool, "confusion": bool, "scam_framing": bool, "app_was_used": "Unknown" | string, "high_price": bool, "legal_or_threatening": bool}`.
-- `messages[*]`: `{"role": "user", "content": string}` or `{"role": "assistant", "content": string}` or `{"role": "assistant", "tool_calls": [...]}` or `{"role": "tool", "tool_call_id": string, "content": string}`.
+- `signal_history[*]`: JSON object with these exact keys:
+  - `noticeable_anger`: `bool`
+  - `confusion`: `bool`
+  - `scam_framing`: `bool`
+  - `app_was_used`: `"Unknown"` or a string with the detected app name
+  - `high_price`: `bool`
+  - `legal_or_threatening`: `bool`
+- `messages[*]`: JSON object with one of these exact shapes:
+  - `{"role": "user", "content": string}`
+  - `{"role": "assistant", "content": string}`
+  - `{"role": "assistant", "tool_calls": [...]}` where each tool call has `id`, `type`, and `function`
+  - `{"role": "tool", "tool_call_id": string, "content": string}`
 - `payment_data_snapshot` and inbound `payment_data`: free-form JSON objects; in practice they usually carry `owned_bundles` and other billing context.
-- `metadata`: free-form JSON object for case-specific snapshot data.
+- `metadata`: JSON object for ticket-specific structured observability. For `tickets`, it currently has these keys:
+  - `selected_arms`: object with stage keys `persona`, `J1`, `J2`, `J4`, and `J5`, where each value is a selected `arm_id` string for that stage
+  - `available_bundle_id`: string or `null`
+  - `selected_ladder`: object describing the raw selected concession ladder before bundle-specific filtering
+  - `filtered_ladder`: object describing the bundle-adjusted concession ladder actually used for negotiation prompt construction and tool-plan validation
 
 #### `inbound_events`
 

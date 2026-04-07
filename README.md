@@ -61,8 +61,16 @@ cmd /c "set PYTHONPATH=. && uv run uvicorn main:app --port 3000 --host 127.0.0.1
 ```powershell
 $env:PYTHONPATH="."; uv run uvicorn main:app --port 3000 --host 127.0.0.1
 ```
+For automatic code reload while editing, use `--reload`:
+```powershell
+$env:PYTHONPATH="."; uv run uvicorn main:app --port 3000 --host 127.0.0.1 --reload
+```
 
 ### Linux (Ubuntu)
 ```bash
 PYTHONPATH=. uv run uvicorn main:app --port 3000 --host 127.0.0.1
+```
+For automatic code reload while editing, use `--reload`:
+```bash
+PYTHONPATH=. uv run uvicorn main:app --port 3000 --host 127.0.0.1 --reload
 ```
