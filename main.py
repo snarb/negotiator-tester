@@ -2,6 +2,9 @@ import os
 import json
 import time
 import requests
+import sqlite3
+import urllib.parse
+import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -11,15 +14,104 @@ import gradio as gr
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+# Setup Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("negotiator-playground.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
 
-print("--- STARTING MAIN.PY ---")
+logger.info("--- STARTING MAIN.PY ---")
 NEGOTIATOR_API_URL = os.getenv("NEGOTIATOR_API_URL", "http://127.0.0.1:8000/api/v1/inbound/messages")
 NEGOTIATOR_INBOUND_TOKEN = os.getenv("NEGOTIATOR_INBOUND_BEARER_TOKEN", os.getenv("NEGOTIATOR_API_TOKEN", "ILrpza83rsmcBybmBzovM6N6Pb0djx1xVRCMYjFD2fc"))
 NEGOTIATOR_OUTBOUND_TOKEN = os.getenv("NEGOTIATOR_OUTBOUND_BEARER_TOKEN", os.getenv("NEGOTIATOR_API_TOKEN", "ldHI5i88dssuGoacqDDSimNYLmhjZVcE7qGqQWSsMbo"))
 
-print(f"API URL: {NEGOTIATOR_API_URL}")
+logger.info(f"API URL: {NEGOTIATOR_API_URL}")
+
+NEGOTIATOR_DB_PATH = os.getenv("NEGOTIATOR_DB_PATH")
+if not NEGOTIATOR_DB_PATH:
+    logger.warning("NEGOTIATOR_DB_PATH not set in environment.")
+
+reported_db_facts: Dict[str, set] = {}
+
+def check_db_for_updates(ticket_id: str):
+    if not ticket_id.strip():
+        return
+    if ticket_id not in reported_db_facts:
+        reported_db_facts[ticket_id] = set()
+    facts = reported_db_facts[ticket_id]
+    
+    try:
+        # Convert path to URI
+        db_path_fwd = NEGOTIATOR_DB_PATH.replace('\\', '/')
+        db_uri = f"file:{urllib.parse.quote(db_path_fwd)}?mode=ro"
+        conn = sqlite3.connect(db_uri, uri=True)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM tickets WHERE ticket_id = ?", (ticket_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return
+            
+        def report(key: str, message: str):
+            if key not in facts:
+                facts.add(key)
+                add_message(ticket_id, "System (DB Info)", message, timestamp=True)
+                
+        # 1. Selected arms
+        parsed_meta = {}
+        if row['metadata']:
+            try: parsed_meta = json.loads(row['metadata'])
+            except: pass
+            
+        arms = parsed_meta.get('selected_arms', [])
+        if arms:
+            arm_names = [a.get('name', str(a)) if isinstance(a, dict) else str(a) for a in arms]
+            report(f"arms_{len(arms)}", f"**Selected Arms:** {', '.join(arm_names)}")
+            
+        # 2. csat_score and dispute_detected
+        if row['csat_received']:
+            report(f"csat_{row['csat_score']}", f"**CSAT Score Received:** {row['csat_score']}")
+        if row['dispute_detected']:
+            report("dispute_detected", "**Dispute Detected!**")
+            
+        # 3. actions
+        if row['issued_refund_pct'] > 0:
+            report(f"refund_{row['issued_refund_pct']}", f"**Action Executed:** Issued Refund ({row['issued_refund_pct']}%)")
+        if row['granted_free_months'] > 0:
+            report(f"free_months_{row['granted_free_months']}", f"**Action Executed:** Granted Free Months ({row['granted_free_months']})")
+        if row['granted_bundle_id']:
+            report(f"bundle_{row['granted_bundle_id']}", f"**Action Executed:** Granted Bundle ({row['granted_bundle_id']})")
+        if row['was_escalated_to_human']:
+            report("escalated", "**Action Executed:** Escalated to Human")
+            
+        # 4. closure and finalization
+        if row['status'] in ('CLOSED', 'FINALIZED'):
+            report(f"status_{row['status']}", f"**Ticket Status:** {row['status']} (Closure Reason: {row['closure_reason']}, Finalization Reason: {row['finalization_reason']})")
+            
+        # 5. signal_history
+        sig_hist_str = row['signal_history']
+        if sig_hist_str:
+            try:
+                sig_hist = json.loads(sig_hist_str)
+                if isinstance(sig_hist, list) and len(sig_hist) > 0:
+                    hist_len = len(sig_hist)
+                    last_sig = sig_hist[-1]
+                    report(f"signal_history_{hist_len}", f"**Signal History (Step {hist_len}):**\n```json\n{json.dumps(last_sig, indent=2)}\n```")
+            except: pass
+            
+    except Exception as e:
+        logger.error(f"Error checking SQLite DB {NEGOTIATOR_DB_PATH} for updates: {e}", exc_info=True)
 
 app = FastAPI(title="Negotiator Playground Mock Server")
 
@@ -55,6 +147,9 @@ def add_message(ticket_id: str, role: str, content: str, timestamp: bool = True)
             history.append({"role": "user", "content": formatted_content})
         elif role == "API Call":
             formatted_content = f"**API Call ({current_time}):**\n{content}"
+            history.append({"role": "assistant", "content": formatted_content})
+        elif role == "System (DB Info)":
+            formatted_content = f"**System DB Info ({current_time}):**\n{content}"
             history.append({"role": "assistant", "content": formatted_content})
         else: # assistant
             formatted_content = f"**Assistant ({current_time}):**\n{content}"
@@ -191,6 +286,7 @@ def ui_send_message(user_text, ticket_id, payment_data_str):
     return "", get_history(ticket_id)
 
 def refresh_chat(ticket_id):
+    check_db_for_updates(ticket_id)
     history = get_history(ticket_id)
     return history
 
@@ -231,6 +327,6 @@ with gr.Blocks(title="Playground Testing Tool") as demo:
 
 # Mount Gradio app to FastAPI server
 # Since this goes into the root, it handles GET /
-print("--- MOUNTING GRADIO ---")
+logger.info("--- MOUNTING GRADIO ---")
 gradio_app = gr.mount_gradio_app(app, demo, path="/")
-print("--- GRADIO MOUNTED ---")
+logger.info("--- GRADIO MOUNTED ---")

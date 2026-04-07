@@ -20,7 +20,7 @@
 - Never mark a task complete without proving it works
 - Diff behavior between main and your changes when relevant
 - Ask yourself: "Would a staff engineer approve this?"
-- Run tests, check logs, demonstrate correctness 
+- Run UI tests, check logs, demonstrate correctness before ending the task
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask "is there a more elegant way?"
@@ -45,6 +45,7 @@
 - Comprehensive documentation is available in `docs/architecture.md`
 - The external integration contract for UI testing and simulation is defined via the Inbound and Outbound Action APIs as documented in `docs/ICD.md`
 - General setup and installation instructions can be found in the `README.md` file.
+- Backend Database Schema documentation is available in  `docs/Database Schema.md`
 - Alsways update documentation as the last step, fully preserve details in the existing docs; remove or rewrite only the sections that are actually obsolete.
 
 
