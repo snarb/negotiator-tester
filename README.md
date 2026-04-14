@@ -45,6 +45,8 @@ The panel reads the `tickets` table in read-only mode and appends useful debuggi
 ### Logging
 All application logs, including SQLite connection tracebacks and server start events, are automatically saved to `negotiator-playground.log` in the root of the project directory alongside being printed to the console.
 
+Every inbound request sent to the Negotiator backend is logged with a generated `request_id`, the target `ticket_id`, the request payload, redacted headers, response status, response body, and elapsed time. The same `request_id` is sent as the `X-Request-ID` header so backend logs can be correlated with the playground log when investigating a `Backend Error 500`.
+
 ## System Requirements
 
 - **Windows**: Windows 11

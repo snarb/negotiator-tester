@@ -101,6 +101,13 @@ class SmokeTest(unittest.TestCase):
             ],
         )
 
+    def test_ticket_id_generation_uses_random_test_prefix(self):
+        with patch("main.random.randint", return_value=4242) as mocked_randint:
+            ticket_id = main.generate_ticket_id()
+
+        mocked_randint.assert_called_once_with(0, 100000)
+        self.assertEqual(ticket_id, "TEST-4242")
+
 
 if __name__ == "__main__":
     unittest.main()

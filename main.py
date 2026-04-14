@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import time
 import requests
 import sqlite3
@@ -102,6 +103,10 @@ def render_config_banner() -> str:
             + format_debug_json({"missing_env_vars": CONFIG_ERRORS})
         )
     return "### Configuration OK\nAll required env vars are present."
+
+
+def generate_ticket_id() -> str:
+    return f"TEST-{random.randint(0, 100000)}"
 
 
 def format_debug_json(value: Any) -> str:
@@ -445,7 +450,7 @@ with gr.Blocks(title="Playground Testing Tool") as demo:
     
     with gr.Row():
         with gr.Column(scale=1):
-            ticket_input = gr.Textbox(label="Ticket ID", value="TEST-12345")
+            ticket_input = gr.Textbox(label="Ticket ID", value=generate_ticket_id)
             payment_input = gr.TextArea(label="Payment Data", value=DEFAULT_PAYMENT_DATA, lines=15)
             
         with gr.Column(scale=3):
